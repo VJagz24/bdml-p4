@@ -120,6 +120,8 @@ def main():
 
     # Data Loading
     print("\nLoading dataset...")
+    data_load_start = time.time()
+    
     tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
     tokenizer.pad_token = tokenizer.eos_token
 
@@ -180,10 +182,14 @@ def main():
         collate_fn=collate_fn
     )
 
+    data_load_time = time.time() - data_load_start
     print(f"✓ Data loaded: {len(train_loader)} train batches, {len(val_loader)} val batches")
+    print(f"  Data loading time: {data_load_time:.2f}s")
 
     # Model
     print("\nInitializing model...")
+    model_init_start = time.time()
+    
     model_args = dict(
         n_layer=n_layer,
         n_head=n_head,
@@ -204,6 +210,9 @@ def main():
         print("Compiling model...")
         model = torch.compile(model)
 
+    model_init_time = time.time() - model_init_start
+    print(f"  Model initialization time: {model_init_time:.2f}s")
+
     # Optimizer
     print("Setting up optimizer...")
     optimizer = model.configure_optimizers(weight_decay, learning_rate, (beta1, beta2), device_type)
@@ -222,6 +231,9 @@ def main():
     print("STARTING TRAINING")
     print("="*70)
 
+    # START TIMING
+    training_start_time = time.time()
+    
     train_loader_iter = iter(train_loader)
     best_val_loss = 1e9
     t0 = time.time()
@@ -300,10 +312,19 @@ def main():
         
         local_iter_num += 1
 
+    # END TIMING
+    training_end_time = time.time()
+    total_training_time = training_end_time - training_start_time
+
     print("\n" + "="*70)
     print("TRAINING COMPLETE")
     print("="*70)
     print(f"Best validation loss: {best_val_loss:.4f}")
+    print(f"Total training time: {total_training_time:.2f}s ({total_training_time/60:.2f} minutes)")
+    print(f"Average time per iteration: {total_training_time/max_iters:.3f}s")
+    print(f"Data loading time: {data_load_time:.2f}s")
+    print(f"Model init time: {model_init_time:.2f}s")
+    print(f"Pure training time: {total_training_time:.2f}s")
     print(f"Checkpoints saved to: {out_dir}/")
 
 # -----------------------------------------------------------------------------
