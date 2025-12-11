@@ -17,7 +17,8 @@ from torch.nn import functional as F
 
 # Try to import MegaBlocks for MoE support
 try:
-    from megablocks.layers import MoE
+    from megablocks.layers.moe import MoE
+    from megablocks.layers.arguments import Arguments
     MEGABLOCKS_AVAILABLE = True
 except ImportError:
     MEGABLOCKS_AVAILABLE = False
@@ -101,26 +102,53 @@ class MLP(nn.Module):
 
 class MoELayer(nn.Module):
     """
-    Mixture of Experts layer using MegaBlocks
+    Mixture of Experts layer - Simple PyTorch implementation
+    Works on both CPU and GPU without MegaBlocks dependency
     """
     def __init__(self, config):
         super().__init__()
+        self.num_experts = config.num_experts
+        self.top_k = config.top_k
         
-        if not MEGABLOCKS_AVAILABLE:
-            raise ImportError("MegaBlocks required for MoE. Install with: pip install megablocks")
+        # Create multiple expert networks (each is an MLP)
+        self.experts = nn.ModuleList([MLP(config) for _ in range(self.num_experts)])
         
-        # MegaBlocks MoE handles all the complex CUDA stuff internally
-        self.moe = MoE(
-            hidden_size=config.n_embd,
-            ffn_hidden_size=4 * config.n_embd,  # Same as MLP expansion
-            moe_num_experts=config.num_experts,
-            moe_top_k=config.top_k,
-        )
+        # Router: decides which expert(s) to use
+        self.router = nn.Linear(config.n_embd, self.num_experts, bias=False)
     
     def forward(self, x):
-        # MegaBlocks handles routing, expert computation, combining
-        # All the CUDA kernels are inside megablocks.layers.MoE
-        return self.moe(x)
+        batch_size, seq_len, hidden_size = x.shape
+        x_flat = x.view(-1, hidden_size)  # Flatten to (B*T, C)
+        
+        # Get router scores for each token
+        router_logits = self.router(x_flat)  # (B*T, num_experts)
+        router_probs = F.softmax(router_logits, dim=-1)
+        
+        # Select top-k experts per token
+        top_k_probs, top_k_indices = torch.topk(router_probs, self.top_k, dim=-1)
+        top_k_probs = top_k_probs / top_k_probs.sum(dim=-1, keepdim=True)  # Normalize
+        
+        # Compute weighted expert outputs
+        expert_outputs = torch.zeros_like(x_flat)
+        
+        for i in range(self.num_experts):
+            # Find tokens that use this expert
+            expert_mask = (top_k_indices == i).any(dim=-1)
+            
+            if expert_mask.any():
+                # Get inputs for this expert
+                expert_input = x_flat[expert_mask]
+                
+                # Run through expert
+                expert_output = self.experts[i](expert_input)
+                
+                # Get weights for this expert
+                expert_weight = top_k_probs[expert_mask, (top_k_indices[expert_mask] == i).nonzero(as_tuple=True)[1]]
+                
+                # Add weighted output
+                expert_outputs[expert_mask] += expert_weight.unsqueeze(-1) * expert_output
+        
+        return expert_outputs.view(batch_size, seq_len, hidden_size)
 
 class Block(nn.Module):
 
@@ -143,11 +171,11 @@ class Block(nn.Module):
 
 @dataclass
 class GPTConfig:
-    block_size: int = 256       # ← Changed back to 256 for 5M
+    block_size: int = 256
     vocab_size: int = 50304
-    n_layer: int = 4            # ← Changed back to 4 for 5M
-    n_head: int = 4             # ← Changed back to 4 for 5M
-    n_embd: int = 256           # ← Changed back to 256 for 5M
+    n_layer: int = 4
+    n_head: int = 4
+    n_embd: int = 256
     dropout: float = 0.0
     bias: bool = True
     use_moe: bool = False
@@ -368,53 +396,4 @@ class GPT(nn.Module):
 
         return idx
 
-
-# Helper function to get different model sizes
-def get_config(size='gpt2-medium'):
-    """
-    Get predefined configurations for different model sizes
-    """
-    configs = {
-        'tiny': {  # ~16M parameters
-            'n_layer': 4,
-            'n_head': 4,
-            'n_embd': 256,
-            'block_size': 256,
-            'vocab_size': 50304,
-            'dropout': 0.0,
-            'bias': True,
-            'use_moe': False
-        },
-        'small': {  # ~40M parameters
-            'n_layer': 8,
-            'n_head': 8,
-            'n_embd': 512,
-            'block_size': 512,
-            'vocab_size': 50304,
-            'dropout': 0.0,
-            'bias': True,
-            'use_moe': False
-        },
-        'gpt2': {  # 124M parameters
-            'n_layer': 12,
-            'n_head': 12,
-            'n_embd': 768,
-            'block_size': 1024,
-            'vocab_size': 50304,
-            'dropout': 0.0,
-            'bias': True,
-            'use_moe': False
-        },
-        'gpt2-medium': {  # 350M parameters (DEFAULT)
-            'n_layer': 24,
-            'n_head': 16,
-            'n_embd': 1024,
-            'block_size': 1024,
-            'vocab_size': 50304,
-            'dropout': 0.0,
-            'bias': True,
-            'use_moe': False
-        }
-    }
-    
-    return GPTConfig(**configs[size])
+        
