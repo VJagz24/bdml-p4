@@ -40,7 +40,7 @@ bias = True
 # Training
 batch_size = 8
 gradient_accumulation_steps = 4  # Effective batch size = 8 * 4 = 32
-max_iters = 100     # Total training iterations
+max_iters = 1000     # Total training iterations
 learning_rate = 3e-4
 weight_decay = 1e-1
 beta1 = 0.9
