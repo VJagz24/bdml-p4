@@ -1,6 +1,6 @@
 """
-MoE GPT Training Script for Comparison
-Uses Mixture of Experts in MLP layers with MegaBlocks
+MoE GPT Training Script for MoE Comparison
+Based on nanoGPT architecture
 """
 
 import os
@@ -29,16 +29,18 @@ dataset_name = 'wikitext'
 dataset_config = 'wikitext-103-v1'
 max_seq_length = 256
 
-# Model (MoE parameters)
+# Model (MoE with 8 experts)
 n_layer = 4
 n_head = 4
 n_embd = 256
 block_size = 256
 dropout = 0.0
 bias = True
-use_moe = True       # ← MoE enabled
-num_experts = 8      # ← 8 experts
-top_k = 1            # ← Use 1 expert per token
+
+# MoE Configuration
+use_moe = True
+num_experts = 8
+top_k = 1
 
 # Training
 batch_size = 8
@@ -171,8 +173,8 @@ def main():
         train_dataset,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=4,  # Use multiple workers on GPU
-        pin_memory=True,  # Faster data transfer to GPU
+        num_workers=0,
+        pin_memory=False,
         collate_fn=collate_fn
     )
 
@@ -180,8 +182,8 @@ def main():
         val_dataset,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=4,
-        pin_memory=True,
+        num_workers=0,
+        pin_memory=False,
         collate_fn=collate_fn
     )
 
@@ -201,9 +203,9 @@ def main():
         bias=bias,
         vocab_size=50304,
         dropout=dropout,
-        use_moe=True,           # ← MoE enabled
-        num_experts=num_experts, # ← 8 experts
-        top_k=top_k             # ← top-1 routing
+        use_moe=use_moe,          # Enable MoE
+        num_experts=num_experts,  # 8 experts
+        top_k=top_k               # Top-1 routing
     )
 
     gptconf = GPTConfig(**model_args)
