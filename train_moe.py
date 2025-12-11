@@ -1,6 +1,6 @@
 """
 MoE GPT Training Script for MoE Comparison
-Based on nanoGPT architecture
+Based on nanoGPT architecture with MegaBlocks MoE
 """
 
 import os
@@ -123,49 +123,70 @@ def main():
     ptdtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16, 'float16': torch.float16}[dtype]
     ctx = torch.amp.autocast(device_type=device_type, dtype=ptdtype) if device_type == 'cuda' else torch.amp.autocast(device_type=device_type, enabled=False)
 
-    # Data Loading
+    # Data Loading WITH CACHING
     print("\nLoading dataset...")
     data_load_start = time.time()
     
     tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
     tokenizer.pad_token = tokenizer.eos_token
 
-    # Load dataset
-    train_dataset = load_dataset(dataset_name, dataset_config, split="train")
-    val_dataset = load_dataset(dataset_name, dataset_config, split="validation")
-
-    print(f"Train examples: {len(train_dataset):,}")
-    print(f"Val examples: {len(val_dataset):,}")
-
-    # Tokenize
-    def tokenize_function(examples):
-        return tokenizer(
-            examples["text"],
-            truncation=True,
-            max_length=max_seq_length,
-            padding='max_length',
-            return_tensors='pt'
+    # Check if tokenized cache exists
+    cache_dir = './tokenized_cache'
+    os.makedirs(cache_dir, exist_ok=True)
+    
+    train_cache_file = os.path.join(cache_dir, f'train_tokenized_{max_seq_length}.pt')
+    val_cache_file = os.path.join(cache_dir, f'val_tokenized_{max_seq_length}.pt')
+    
+    if os.path.exists(train_cache_file) and os.path.exists(val_cache_file):
+        print("✓ Loading tokenized dataset from cache...")
+        train_dataset = torch.load(train_cache_file)
+        val_dataset = torch.load(val_cache_file)
+        print(f"Train examples: {len(train_dataset):,}")
+        print(f"Val examples: {len(val_dataset):,}")
+    else:
+        print("✗ Cache not found, tokenizing dataset (this will take ~17 minutes)...")
+        
+        # Load dataset
+        train_dataset = load_dataset(dataset_name, dataset_config, split="train")
+        val_dataset = load_dataset(dataset_name, dataset_config, split="validation")
+        
+        print(f"Train examples: {len(train_dataset):,}")
+        print(f"Val examples: {len(val_dataset):,}")
+        
+        # Tokenize
+        def tokenize_function(examples):
+            return tokenizer(
+                examples["text"],
+                truncation=True,
+                max_length=max_seq_length,
+                padding='max_length',
+                return_tensors='pt'
+            )
+        
+        print("Tokenizing train dataset...")
+        train_dataset = train_dataset.map(
+            tokenize_function,
+            batched=True,
+            remove_columns=["text"],
+            desc="Tokenizing train"
         )
+        
+        print("Tokenizing validation dataset...")
+        val_dataset = val_dataset.map(
+            tokenize_function,
+            batched=True,
+            remove_columns=["text"],
+            desc="Tokenizing val"
+        )
+        
+        # Save to cache
+        print("Saving tokenized dataset to cache...")
+        torch.save(train_dataset, train_cache_file)
+        torch.save(val_dataset, val_cache_file)
+        print("✓ Cache saved!")
 
-    print("Tokenizing train dataset...")
-    train_dataset = train_dataset.map(
-        tokenize_function,
-        batched=True,
-        remove_columns=["text"],
-        desc="Tokenizing train"
-    )
-
-    print("Tokenizing validation dataset...")
-    val_dataset = val_dataset.map(
-        tokenize_function,
-        batched=True,
-        remove_columns=["text"],
-        desc="Tokenizing val"
-    )
-
-    # DataLoaders - Fixed collate function
+    # DataLoaders
     def collate_fn(batch):
-        # Extract input_ids and convert to tensor
         input_ids = [item['input_ids'] for item in batch]
         return torch.tensor(input_ids)
 
@@ -224,7 +245,7 @@ def main():
     print("Setting up optimizer...")
     optimizer = model.configure_optimizers(weight_decay, learning_rate, (beta1, beta2), device_type)
     
-    # GradScaler - Fixed for compatibility
+    # GradScaler
     if device_type == 'cuda':
         try:
             scaler = torch.amp.GradScaler('cuda', enabled=(dtype == 'float16'))
