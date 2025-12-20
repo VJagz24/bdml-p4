@@ -94,5 +94,38 @@ python train_baseline.py
 # Train MoE model
 python train_moe.py
 ```
+## 2) Cuda Kernels MoE (`moe-gpt-project/`)
+
+This directory includes the 2 CUDA kernel implementations. The layout is as such:
+-moe-gpt-project:
+      -main.ipynb: python notebook to run the kernel implementations
+      -model.py : model implementation for CUDA Kernel 1: End-to-End Scatter–Compute–Gather Kernel
+      -model_kernel.py: model implementation for CUDA Kernel 2: End-to-End Scat- ter–Compute–Gather Kernel
+      CUDA Kernel 1 implementation:
+          -model_combine.py
+          -moe_dispatch_combine_cpp.cpp
+          -moe_dispatch_combine_cuda.cu
+          -setit.py
+      CUDA Kernel 2 implementation: 
+          -moe_ffn.py
+          -moe_ffn_cpp.cpp
+          -moe_ffn_cuda.cu
+          -setup.py
+      -train_moe.py: training script
+There are 2 ways to reproduce the CUDA Kernel 1 results:
+Method 1: 
+    -Clone the repository in a collab
+    -open up the project directory 
+    -open the main.ipynb file
+    -connect to A100 GPU and run all cells 
+Method 2: 
+    -Download moe-gpt-project directly
+    -Put it in google drive
+    -Open main.ipynb in collab
+    -Connect to A100  GPU and run all cells
+As mentioned CUDA Kernel 2 was not used for results since when initially tested it suffered much more degrading performance so the primary focus became CUDA Kernel 1.
+If you want to produce results for CUDA kernel 2 you follow the same steps as in Method 1 or Method 2. But you change the name of model_kernel.py in the moe-gpt-project folder to model.py and vice versa. 
+
+
 
 Results will be saved in `out-baseline/` and `out-moe/` directories.
