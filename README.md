@@ -94,6 +94,9 @@ python train_baseline.py
 # Train MoE model
 python train_moe.py
 ```
+
+Results will be saved in `out-baseline/` and `out-moe/` directories.
+
 ## 2) Cuda Kernels MoE (`moe-gpt-project/`)
 
 This directory includes the 2 CUDA kernel implementations. The layout is as such:
@@ -180,6 +183,3 @@ Method 2:
 As mentioned CUDA Kernel 2 was not used for results since when initially tested it suffered much more degrading performance so the primary focus became CUDA Kernel 1.
 If you want to produce results for CUDA kernel 2 you follow the same steps as in Method 1 or Method 2. But you change the name of model_kernel.py in the moe-gpt-project folder to model.py and vice versa. 
 
-
-
-Results will be saved in `out-baseline/` and `out-moe/` directories.
