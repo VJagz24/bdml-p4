@@ -1,6 +1,6 @@
 """
-MoE GPT Training Script for MoE Comparison
-Based on nanoGPT architecture with MegaBlocks MoE
+Baseline GPT Training Script for MoE Comparison
+Based on nanoGPT architecture
 """
 
 import os
@@ -18,7 +18,7 @@ from model import GPTConfig, GPT
 # Configuration
 # -----------------------------------------------------------------------------
 # I/O
-out_dir = 'out-moe'
+out_dir = 'out-baseline'
 eval_interval = 500  # Evaluate every N iterations
 log_interval = 10    # Log every N iterations
 eval_iters = 50      # Number of iterations for evaluation
@@ -29,7 +29,7 @@ dataset_name = 'wikitext'
 dataset_config = 'wikitext-103-v1'
 max_seq_length = 256
 
-# Model (MoE with 8 experts)
+# Model (16M parameters)
 n_layer = 4
 n_head = 4
 n_embd = 256
@@ -37,15 +37,10 @@ block_size = 256
 dropout = 0.0
 bias = True
 
-# MoE Configuration
-use_moe = True
-num_experts = 8
-top_k = 1
-
 # Training
 batch_size = 8
 gradient_accumulation_steps = 4  # Effective batch size = 8 * 4 = 32
-max_iters = 1000     # Total training iterations
+max_iters = 5000     # Total training iterations
 learning_rate = 3e-4
 weight_decay = 1e-1
 beta1 = 0.9
@@ -104,11 +99,11 @@ def estimate_loss(model, train_loader, val_loader, ctx, device, eval_iters):
 # -----------------------------------------------------------------------------
 def main():
     print("="*70)
-    print("MOE GPT TRAINING")
+    print("BASELINE GPT TRAINING")
     print("="*70)
     print(f"Device: {device}")
     print(f"Dtype: {dtype}")
-    print(f"Model: {n_layer}L, {n_head}H, {n_embd}D (MoE: {num_experts} experts, top_k={top_k})")
+    print(f"Model: {n_layer}L, {n_head}H, {n_embd}D")
     print(f"Batch size: {batch_size} × {gradient_accumulation_steps} = {batch_size * gradient_accumulation_steps}")
     print(f"Max iterations: {max_iters}")
     print("="*70)
@@ -224,9 +219,7 @@ def main():
         bias=bias,
         vocab_size=50304,
         dropout=dropout,
-        use_moe=use_moe,          # Enable MoE
-        num_experts=num_experts,  # 8 experts
-        top_k=top_k               # Top-1 routing
+        use_moe=False  # Baseline: no MoE
     )
 
     gptconf = GPTConfig(**model_args)
